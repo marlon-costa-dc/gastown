@@ -320,7 +320,7 @@ func TestBeadsPrefixConflictDetection(t *testing.T) {
 	// Create routes with a duplicate prefix
 	routes := []beads.Route{
 		{Prefix: "gt-", Path: "gastown/mayor/rig"},
-		{Prefix: "gt-", Path: "other/mayor/rig"}, // Duplicate!
+		{Prefix: "GT-", Path: "other/mayor/rig"}, // Case-equivalent duplicate!
 		{Prefix: "bd-", Path: "beads/mayor/rig"},
 	}
 	if err := beads.WriteRoutes(beadsDir, routes); err != nil {
@@ -484,8 +484,8 @@ func TestBeadsAppendRoute(t *testing.T) {
 		t.Errorf("expected 2 routes, got %d", len(routes))
 	}
 
-	// Update existing route (same prefix, different path)
-	route1Updated := beads.Route{Prefix: "gt-", Path: "newpath/mayor/rig"}
+	// Update existing route (case-equivalent prefix, different path)
+	route1Updated := beads.Route{Prefix: "GT-", Path: "newpath/mayor/rig"}
 	if err := beads.AppendRoute(tmpDir, route1Updated); err != nil {
 		t.Fatalf("AppendRoute update: %v", err)
 	}
@@ -521,7 +521,7 @@ func TestBeadsRemoveRoute(t *testing.T) {
 	}
 
 	// Remove one route
-	if err := beads.RemoveRoute(tmpDir, "gt-"); err != nil {
+	if err := beads.RemoveRoute(tmpDir, "GT-"); err != nil {
 		t.Fatalf("RemoveRoute: %v", err)
 	}
 

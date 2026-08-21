@@ -614,7 +614,7 @@ exit /b 0
 	}
 }
 
-func TestRoutedBeadReadUsesCanonicalShowWithoutUnsupportedAllowStale(t *testing.T) {
+func TestRoutedBeadReadMatchesMixedCasePrefixWithoutUnsupportedAllowStale(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: shell stub uses POSIX syntax")
 	}
@@ -622,8 +622,8 @@ func TestRoutedBeadReadUsesCanonicalShowWithoutUnsupportedAllowStale(t *testing.
 	t.Cleanup(beads.ResetBdAllowStaleCacheForTest)
 
 	townRoot := t.TempDir()
-	beadID := "gt-new123"
-	rigDir := filepath.Join(townRoot, "gastown", "mayor", "rig")
+	beadID := "CLIProxyAPI-squ.6"
+	rigDir := filepath.Join(townRoot, "CLIProxyAPI", "mayor", "rig")
 	rigBeadsDir := filepath.Join(rigDir, ".beads")
 	for _, dir := range []string{filepath.Join(townRoot, "mayor"), filepath.Join(townRoot, ".beads"), rigBeadsDir} {
 		if err := os.MkdirAll(dir, 0755); err != nil {
@@ -634,7 +634,7 @@ func TestRoutedBeadReadUsesCanonicalShowWithoutUnsupportedAllowStale(t *testing.
 		t.Fatalf("write town.json: %v", err)
 	}
 	routes := strings.Join([]string{
-		`{"prefix":"gt-","path":"gastown/mayor/rig"}`,
+		`{"prefix":"cliproxyapi-","path":"CLIProxyAPI/mayor/rig"}`,
 		`{"prefix":"hq-","path":"."}`,
 		"",
 	}, "\n")
@@ -663,7 +663,7 @@ case "$1" in
       echo "wrong database: ${BEADS_DIR:-}" >&2
       exit 1
     fi
-    echo '[{"id":"gt-new123","title":"Routed bead","status":"open","assignee":"","description":"body","issue_type":"bug","labels":["x"],"dependencies":[{"id":"gt-wisp-old","status":"open"}]}]'
+    echo '[{"id":"CLIProxyAPI-squ.6","title":"Routed bead","status":"open","assignee":"","description":"body","issue_type":"bug","labels":["x"],"dependencies":[{"id":"CLIProxyAPI-wisp-old","status":"open"}]}]'
     ;;
 esac
 `

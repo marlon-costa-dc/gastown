@@ -30,6 +30,7 @@ func TestGetPrefixForRig(t *testing.T) {
 		expected string
 	}{
 		{"gastown", "gt"},
+		{"GASTOWN", "gt"},
 		{"beads", "bd"},
 		{"unknown", "gt"}, // default
 		{"", "gt"},        // empty rig -> default
@@ -129,6 +130,7 @@ func TestGetRigPathForPrefix(t *testing.T) {
 		expected string
 	}{
 		{"ap-", filepath.Join(tmpDir, "ai_platform/mayor/rig")},
+		{"AP-", filepath.Join(tmpDir, "ai_platform/mayor/rig")},
 		{"gt-", filepath.Join(tmpDir, "gastown/mayor/rig")},
 		{"hq-", tmpDir},  // Town-level beads return townRoot
 		{"unknown-", ""}, // Unknown prefix returns empty
@@ -255,6 +257,11 @@ func TestResolveBeadsDirForID(t *testing.T) {
 			expected: rigBeadsDir,
 		},
 		{
+			name:     "mixed-case bead prefix resolves to canonical rig beadsDir",
+			beadID:   "GT-abc",
+			expected: rigBeadsDir,
+		},
+		{
 			name:     "unknown prefix returns currentBeadsDir",
 			beadID:   "xx-unknown",
 			expected: beadsDir,
@@ -358,6 +365,7 @@ func TestGetRigNameForPrefix(t *testing.T) {
 		expected string
 	}{
 		{"gt-", "gastown"},
+		{"GT-", "gastown"},
 		{"bd-", "beads"},
 		{"hq-", ""},      // Town-level, no specific rig
 		{"unknown-", ""}, // Not in routes
@@ -394,6 +402,7 @@ func TestGetRigDirForName(t *testing.T) {
 		expected string
 	}{
 		{"gantry", filepath.Join(tmpDir, "gantry")},
+		{"GANTRY", filepath.Join(tmpDir, "gantry")},
 		{"algoanki", filepath.Join(tmpDir, "algoanki/mayor/rig")},
 		{"unknown", ""}, // Not in routes
 		{"", ""},        // Empty rig name
@@ -593,6 +602,12 @@ func TestCheckPrefixAvailable(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:    "same rig re-registering case-equivalent prefix",
+			prefix:  "GT-",
+			newPath: "GASTOWN",
+			wantErr: false,
+		},
+		{
 			name:    "same rig different path variant",
 			prefix:  "gt-",
 			newPath: "gastown/mayor/rig",
@@ -600,7 +615,7 @@ func TestCheckPrefixAvailable(t *testing.T) {
 		},
 		{
 			name:    "collision with different rig",
-			prefix:  "gt-",
+			prefix:  "GT-",
 			newPath: "getresearch",
 			wantErr: true,
 		},
@@ -697,6 +712,12 @@ func TestValidateRigPrefix(t *testing.T) {
 			name:    "same-rig bead: no error",
 			rigName: "gastown",
 			beadID:  "gt-wisp-abc",
+			wantErr: false,
+		},
+		{
+			name:    "same-rig mixed-case bead prefix: no error",
+			rigName: "gastown",
+			beadID:  "GT-wisp-abc",
 			wantErr: false,
 		},
 		{

@@ -19,6 +19,12 @@ type Route struct {
 	Path   string `json:"path"`   // Relative path to .beads directory from town root
 }
 
+// Route prefixes and rig names identify logical ledgers case-insensitively.
+// Route paths retain their configured spelling for case-sensitive filesystems.
+func sameRouteKey(left, right string) bool {
+	return strings.EqualFold(left, right)
+}
+
 // RoutesFileName is the name of the routes configuration file.
 const RoutesFileName = "routes.jsonl"
 
@@ -77,7 +83,7 @@ func AppendRouteToDir(beadsDir string, route Route) error {
 	// Check if prefix already exists
 	found := false
 	for i, r := range routes {
-		if r.Prefix == route.Prefix {
+		if sameRouteKey(r.Prefix, route.Prefix) {
 			routes[i].Path = route.Path
 			found = true
 			break
@@ -105,7 +111,7 @@ func RemoveRoute(townRoot string, prefix string) error {
 	// Filter out the prefix
 	var filtered []Route
 	for _, r := range routes {
-		if r.Prefix != prefix {
+		if !sameRouteKey(r.Prefix, prefix) {
 			filtered = append(filtered, r)
 		}
 	}
@@ -184,7 +190,7 @@ func GetPrefixForRig(townRoot, rigName string) string {
 	// Routes paths are like "gastown/mayor/rig" or "beads/mayor/rig"
 	for _, r := range routes {
 		parts := strings.SplitN(r.Path, "/", 2)
-		if len(parts) > 0 && parts[0] == rigName {
+		if len(parts) > 0 && sameRouteKey(parts[0], rigName) {
 			// Return prefix without trailing hyphen
 			return strings.TrimSuffix(r.Prefix, "-")
 		}
@@ -209,9 +215,9 @@ func CheckPrefixAvailable(townRoot string, prefix string, newPath string) error 
 	newRig := strings.SplitN(newPath, "/", 2)[0]
 
 	for _, r := range routes {
-		if r.Prefix == prefix {
+		if sameRouteKey(r.Prefix, prefix) {
 			existingRig := strings.SplitN(r.Path, "/", 2)[0]
-			if existingRig != newRig {
+			if !sameRouteKey(existingRig, newRig) {
 				return fmt.Errorf("prefix %q is already used by %s (path: %s); use --prefix to specify a different prefix", prefix, existingRig, r.Path)
 			}
 		}
@@ -231,7 +237,8 @@ func FindConflictingPrefixes(beadsDir string) (map[string][]string, error) {
 	// Group by prefix
 	prefixPaths := make(map[string][]string)
 	for _, r := range routes {
-		prefixPaths[r.Prefix] = append(prefixPaths[r.Prefix], r.Path)
+		prefix := strings.ToLower(r.Prefix)
+		prefixPaths[prefix] = append(prefixPaths[prefix], r.Path)
 	}
 
 	// Filter to only conflicts (more than one path per prefix)
@@ -274,7 +281,7 @@ func GetRigPathForPrefix(townRoot, prefix string) string {
 	}
 
 	for _, r := range routes {
-		if r.Prefix == prefix {
+		if sameRouteKey(r.Prefix, prefix) {
 			if r.Path == "." {
 				return townRoot // Town-level beads
 			}
@@ -300,7 +307,7 @@ func GetRigDirForName(townRoot, rigName string) string {
 			continue // town-level, not a specific rig dir
 		}
 		parts := strings.SplitN(r.Path, "/", 2)
-		if len(parts) > 0 && parts[0] == rigName {
+		if len(parts) > 0 && sameRouteKey(parts[0], rigName) {
 			rigDir := filepath.Join(townRoot, r.Path)
 			if !pathWithin(townRoot, rigDir) {
 				continue
@@ -461,7 +468,7 @@ func GetRigNameForPrefix(townRoot, prefix string) string {
 	}
 
 	for _, r := range routes {
-		if r.Prefix == prefix {
+		if sameRouteKey(r.Prefix, prefix) {
 			if r.Path == "." {
 				return "" // Town-level bead, no specific rig
 			}
@@ -502,7 +509,7 @@ func ResolveBeadsDirForID(currentBeadsDir, beadID string) string {
 	}
 
 	for _, r := range routes {
-		if r.Prefix == prefix {
+		if sameRouteKey(r.Prefix, prefix) {
 			if r.Path == "." {
 				return routesBeadsDir
 			}
@@ -530,7 +537,7 @@ func ValidateRigPrefix(townRoot, rigName, beadID string) error {
 	if actualPrefix == "" {
 		return nil // Can't determine prefix — not an error
 	}
-	if actualPrefix != expectedPrefix {
+	if !sameRouteKey(actualPrefix, expectedPrefix) {
 		return fmt.Errorf("bead %s has prefix %q but rig %q expects prefix %q — bead may have landed in wrong database",
 			beadID, actualPrefix, rigName, expectedPrefix)
 	}
