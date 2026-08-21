@@ -633,6 +633,16 @@ func TestRoutedBeadReadMatchesMixedCasePrefixWithoutUnsupportedAllowStale(t *tes
 	if err := os.WriteFile(filepath.Join(townRoot, "mayor", "town.json"), []byte(`{"type":"town","name":"test"}`), 0644); err != nil {
 		t.Fatalf("write town.json: %v", err)
 	}
+	rigs := &config.RigsConfig{Version: 1, Rigs: map[string]config.RigEntry{
+		"CLIProxyAPI": {
+			GitURL:      "git@github.com:test/CLIProxyAPI.git",
+			AddedAt:     time.Now().Truncate(time.Second),
+			BeadsConfig: &config.BeadsConfig{Repo: "local", Prefix: "cliproxyapi"},
+		},
+	}}
+	if err := config.SaveRigsConfig(filepath.Join(townRoot, "mayor", "rigs.json"), rigs); err != nil {
+		t.Fatalf("SaveRigsConfig: %v", err)
+	}
 	routes := strings.Join([]string{
 		`{"prefix":"cliproxyapi-","path":"CLIProxyAPI/mayor/rig"}`,
 		`{"prefix":"hq-","path":"."}`,
@@ -674,6 +684,12 @@ esac
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("BEADS_DIR", filepath.Join(townRoot, ".beads"))
 	t.Setenv("GT_ROOT", townRoot)
+	t.Setenv(EnvGTRole, "mayor")
+	t.Setenv("GT_POLECAT", "")
+	t.Setenv("GT_CREW", "")
+	t.Setenv("TMUX_PANE", "")
+	t.Setenv("GT_TEST_NO_NUDGE", "1")
+	t.Setenv("GT_TEST_SKIP_HOOK_VERIFY", "1")
 
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -693,6 +709,31 @@ esac
 	}
 	if info.Title != "Routed bead" || info.IssueType != "bug" || len(info.Labels) != 1 || len(info.Dependencies) != 1 {
 		t.Fatalf("info = %+v, want routed issue fields preserved", info)
+	}
+
+	prevDryRun := slingDryRun
+	prevNoConvoy := slingNoConvoy
+	prevOnTarget := slingOnTarget
+	prevFormula := slingFormula
+	prevHookRawBead := slingHookRawBead
+	prevForce := slingForce
+	t.Cleanup(func() {
+		slingDryRun = prevDryRun
+		slingNoConvoy = prevNoConvoy
+		slingOnTarget = prevOnTarget
+		slingFormula = prevFormula
+		slingHookRawBead = prevHookRawBead
+		slingForce = prevForce
+	})
+	slingDryRun = true
+	slingNoConvoy = true
+	slingOnTarget = ""
+	slingFormula = ""
+	slingHookRawBead = false
+	slingForce = false
+
+	if err := runSling(nil, []string{beadID, "CLIProxyAPI"}); err != nil {
+		t.Fatalf("runSling mixed-case routed bead: %v", err)
 	}
 
 	logBytes, err := os.ReadFile(logPath)
