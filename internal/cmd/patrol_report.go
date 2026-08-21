@@ -82,6 +82,19 @@ func runPatrolReport(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unsupported role for patrol report: %q", roleName)
 	}
 
+	return reportPatrolCycle(cfg, patrolReportSummary, patrolReportSteps, autoSpawnPatrol)
+}
+
+// reportPatrolCycle closes one persisted patrol root and starts the next cycle.
+// The spawner is injected so lifecycle tests can exercise consecutive reports
+// without replacing the owner bd/formula creation path with a process-global stub.
+func reportPatrolCycle(
+	cfg PatrolConfig,
+	summary string,
+	steps string,
+	spawn func(PatrolConfig) (string, error),
+) error {
+
 	// Find the active patrol
 	patrolID, _, hasPatrol, findErr := findActivePatrol(cfg)
 	if findErr != nil {
@@ -98,10 +111,10 @@ func runPatrolReport(cmd *cobra.Command, args []string) error {
 	}
 
 	// Build step audit checklist
-	stepAudit := buildStepAudit(cfg.PatrolMolName, patrolReportSteps)
+	stepAudit := buildStepAudit(cfg.PatrolMolName, steps)
 
 	// Update the description with the patrol summary and step audit
-	desc := fmt.Sprintf("Patrol report: %s\n\n%s", patrolReportSummary, stepAudit)
+	desc := fmt.Sprintf("Patrol report: %s\n\n%s", summary, stepAudit)
 	if err := b.Update(patrolID, beads.UpdateOptions{
 		Description: &desc,
 	}); err != nil {
@@ -120,14 +133,14 @@ func runPatrolReport(cmd *cobra.Command, args []string) error {
 	}
 
 	// Close the patrol root
-	if err := b.ForceCloseWithReason("patrol cycle complete: "+patrolReportSummary, patrolID); err != nil {
+	if err := b.ForceCloseWithReason("patrol cycle complete: "+summary, patrolID); err != nil {
 		return fmt.Errorf("closing patrol %s: %w", patrolID, err)
 	}
 
 	fmt.Printf("%s Closed patrol %s\n", style.Success.Render("✓"), patrolID)
 
 	// Start next cycle
-	newPatrolID, err := autoSpawnPatrol(cfg)
+	newPatrolID, err := spawn(cfg)
 	if err != nil {
 		if newPatrolID != "" {
 			fmt.Fprintf(os.Stderr, "warning: %s\n", err.Error())
@@ -139,7 +152,7 @@ func runPatrolReport(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("%s Started new patrol: %s\n", style.Success.Render("✓"), newPatrolID)
 	if cfg.RoleName == "deacon" {
-		stampDeaconHeartbeatOnReport(cfg.BeadsDir, patrolReportSummary)
+		stampDeaconHeartbeatOnReport(cfg.BeadsDir, summary)
 	}
 	return nil
 }

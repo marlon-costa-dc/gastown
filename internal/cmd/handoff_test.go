@@ -699,6 +699,38 @@ func TestHandoffPolecatEnvCheck(t *testing.T) {
 	}
 }
 
+func TestCleanupMoleculeOnHandoff_WitnessLeavesPatrolLifecycleAlone(t *testing.T) {
+	townRoot := t.TempDir()
+	witnessDir := filepath.Join(townRoot, "testrig", "witness")
+	for _, dir := range []string{filepath.Join(townRoot, "mayor"), witnessDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(townRoot, "mayor", "town.json"), []byte(`{"name":"test"}`), 0o644); err != nil {
+		t.Fatalf("write town marker: %v", err)
+	}
+
+	binDir := t.TempDir()
+	bdLog := filepath.Join(t.TempDir(), "bd.log")
+	writeBDStub(t, binDir, "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$BD_LOG\"\n", "@echo off\r\necho %* >> %BD_LOG%\r\n")
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("BD_LOG", bdLog)
+	t.Setenv("GT_ROLE", "testrig/witness")
+	t.Setenv("GT_RIG", "testrig")
+	t.Chdir(witnessDir)
+
+	cleanupMoleculeOnHandoff()
+
+	data, err := os.ReadFile(bdLog)
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatalf("read bd log: %v", err)
+	}
+	if len(data) != 0 {
+		t.Fatalf("Witness handoff touched patrol/attachment state:\n%s", data)
+	}
+}
+
 func TestWarnHandoffGitStatus(t *testing.T) {
 	origCwd, _ := os.Getwd()
 	t.Cleanup(func() { os.Chdir(origCwd) })

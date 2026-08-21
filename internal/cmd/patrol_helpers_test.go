@@ -19,6 +19,7 @@ import (
 	"github.com/steveyegge/gastown/internal/beads"
 	"github.com/steveyegge/gastown/internal/config"
 	"github.com/steveyegge/gastown/internal/constants"
+	"github.com/steveyegge/gastown/internal/doctor"
 	"github.com/steveyegge/gastown/internal/refinery"
 	"github.com/steveyegge/gastown/internal/testutil"
 )
@@ -878,6 +879,105 @@ func createHookedPatrol(t *testing.T, b *beads.Beads, molName, assignee string, 
 		}
 	}
 	return root.ID
+}
+
+func TestWitnessPatrolContextOnlyHandoffSurvivesTwoReports(t *testing.T) {
+	requireBd(t)
+	townRoot, b := setupPatrolTestDB(t)
+
+	const (
+		assignee      = "testrig/witness"
+		handoffBody   = "Investigated a stalled worker; successor should recheck it."
+		patrolMolName = "mol-witness-patrol"
+	)
+
+	handoff, err := b.Create(beads.CreateOptions{
+		Title:       "🤝 HANDOFF: Witness patrol",
+		Description: handoffBody,
+		Labels:      []string{"gt:message"},
+		Priority:    1,
+		Actor:       assignee,
+	})
+	if err != nil {
+		t.Fatalf("create durable handoff: %v", err)
+	}
+	pinned := beads.StatusPinned
+	if err := b.Update(handoff.ID, beads.UpdateOptions{Status: &pinned, Assignee: ptrTo(assignee)}); err != nil {
+		t.Fatalf("pin durable handoff: %v", err)
+	}
+
+	currentPatrolID := createHookedPatrol(t, b, patrolMolName, assignee, true)
+	cfg := PatrolConfig{
+		RoleName:      "witness",
+		PatrolMolName: patrolMolName,
+		BeadsDir:      townRoot,
+		Assignee:      assignee,
+		Beads:         b,
+	}
+
+	var spawnedIDs []string
+	spawn := func(PatrolConfig) (string, error) {
+		id := createHookedPatrol(t, b, patrolMolName, assignee, true)
+		spawnedIDs = append(spawnedIDs, id)
+		return id, nil
+	}
+
+	for cycle := 1; cycle <= 2; cycle++ {
+		closedPatrolID := currentPatrolID
+		if err := reportPatrolCycle(cfg, fmt.Sprintf("cycle %d complete", cycle), "", spawn); err != nil {
+			t.Fatalf("report cycle %d: %v", cycle, err)
+		}
+		if len(spawnedIDs) != cycle {
+			t.Fatalf("cycle %d spawned roots = %d, want %d", cycle, len(spawnedIDs), cycle)
+		}
+		currentPatrolID = spawnedIDs[cycle-1]
+
+		closedPatrol, err := b.Show(closedPatrolID)
+		if err != nil {
+			t.Fatalf("show closed patrol %s: %v", closedPatrolID, err)
+		}
+		if closedPatrol.Status != "closed" {
+			t.Fatalf("cycle %d old patrol status = %q, want closed", cycle, closedPatrol.Status)
+		}
+		children, err := b.List(beads.ListOptions{Parent: closedPatrolID, Status: "all", Priority: -1})
+		if err != nil {
+			t.Fatalf("list old patrol children: %v", err)
+		}
+		for _, child := range children {
+			if child.Status != "closed" {
+				t.Fatalf("cycle %d child %s status = %q, want closed", cycle, child.ID, child.Status)
+			}
+		}
+
+		activeID, _, found, err := findActivePatrol(cfg)
+		if err != nil {
+			t.Fatalf("resolve active patrol after cycle %d: %v", cycle, err)
+		}
+		if !found || activeID != currentPatrolID {
+			t.Fatalf("cycle %d active patrol = (%q, %t), want (%q, true)", cycle, activeID, found, currentPatrolID)
+		}
+
+		persistedHandoff, err := b.Show(handoff.ID)
+		if err != nil {
+			t.Fatalf("show handoff after cycle %d: %v", cycle, err)
+		}
+		if persistedHandoff.Status != beads.StatusPinned || persistedHandoff.Description != handoffBody {
+			t.Fatalf("cycle %d changed durable handoff: status=%q description=%q", cycle, persistedHandoff.Status, persistedHandoff.Description)
+		}
+		if attachment := beads.ParseAttachmentFields(persistedHandoff); attachment != nil {
+			t.Fatalf("cycle %d handoff gained attachment fields: %+v", cycle, attachment)
+		}
+
+		check := doctor.NewHookAttachmentValidCheck()
+		result := check.Run(&doctor.CheckContext{TownRoot: townRoot})
+		if result.Status != doctor.StatusOK {
+			t.Fatalf("cycle %d hook-attachment-valid = %s: %s (%v)", cycle, result.Status, result.Message, result.Details)
+		}
+	}
+}
+
+func ptrTo[T any](value T) *T {
+	return &value
 }
 
 func TestFindActivePatrolHooked(t *testing.T) {
